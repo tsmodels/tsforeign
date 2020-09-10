@@ -21,13 +21,13 @@ bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, lev
 
   # 3. Check transformation
   y_orig <- y
+  if (lambda == 1) lambda <- NULL
   if (!is.null(lambda)) {
     transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
     y <- transform$transform(y = y, frequency = frequency)
     transform$lambda <- attr(y, "lambda")
   } else{
-    transform <- box_cox(lambda = 1, lower = lambda_lower, upper = lambda_upper)
-    transform$lambda <- 1
+    transform <- NULL
   }
   if (differences > 0 & distribution == "gaussian") {
     Dy <- na.omit(diff(y, differences = differences))
@@ -260,7 +260,7 @@ fitted.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE, ra
       }
     }
   } else{
-    if (object$spec$transform$lambda != 1 & invdiff & !raw) {
+    if (!is.null(object$spec$transform) & invdiff & !raw) {
       out <- matrix(object$spec$transform$inverse(as.numeric(out), object$spec$transform$lambda), ncol = ncol(out), nrow = nrow(out), byrow = FALSE)
     }
   }

@@ -13,13 +13,13 @@ arima_modelspec = function(y, xreg = NULL, frequency = NULL, seasonal = FALSE, s
   call <- list(frequency = frequency, seasonal = seasonal, seasonal_type = seasonal_type, lambda = lambda, seasonal_harmonics = seasonal_harmonics)
   # 3. Check transformation
   y_orig <- y
+  if (lambda == 1) lambda <- NULL
   if (!is.null(lambda)) {
     transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
     y <- transform$transform(y = y, frequency = frequency)
     transform$lambda <- attr(y, "lambda")
   } else{
-    transform <- box_cox(lambda = 1, lower = lambda_lower, upper = lambda_upper)
-    transform$lambda <- 1
+    transform <- NULL
   }
   # 5. seasonal part
   if (seasonal) {
@@ -108,9 +108,9 @@ summary.arima.estimate = function(object, ...)
 
 fitted.arima.estimate = function(object, raw = FALSE, ...)
 {
-  transform = object$spec$transform
+  transform <- object$spec$transform
   ft <- xts(fitted(object$model), object$spec$target$index)
-  if (transform$lambda != 1 & !raw) {
+  if (!raw & !is.null(transform)) {
     ft <- transform$inverse(ft, transform$lambda)
   }
   return(ft)
@@ -292,7 +292,7 @@ predict.arima.estimate = function(object, h = NULL, newxreg = NULL, nsim = 5000,
     sim[i, ] <- simulate2_Arima(object$model, nsim = h, bootstrap = bootstrap, xreg = xregf, lambda = NULL, innov = innov[,i])
   }
   colnames(sim) = as.character(forc_dates)
-  if (object$spec$transform$lambda != 1) {
+  if (!is.null(object$spec$transform)) {
     sim <- matrix(object$spec$transform$inverse(as.numeric(sim), object$spec$transform$lambda), ncol = ncol(sim), nrow = nrow(sim), byrow = FALSE)
     colnames(sim) <-  as.character(forc_dates)
   }
