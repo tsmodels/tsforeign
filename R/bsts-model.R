@@ -21,7 +21,7 @@ bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, lev
 
   # 3. Check transformation
   y_orig <- y
-  if (lambda == 1) lambda <- NULL
+  if (!is.null(lambda) & lambda == 1) lambda <- NULL
   if (!is.null(lambda)) {
     transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
     y <- transform$transform(y = y, frequency = frequency)

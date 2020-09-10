@@ -13,7 +13,7 @@ arima_modelspec = function(y, xreg = NULL, frequency = NULL, seasonal = FALSE, s
   call <- list(frequency = frequency, seasonal = seasonal, seasonal_type = seasonal_type, lambda = lambda, seasonal_harmonics = seasonal_harmonics)
   # 3. Check transformation
   y_orig <- y
-  if (lambda == 1) lambda <- NULL
+  if (!is.null(lambda) & lambda == 1) lambda <- NULL
   if (!is.null(lambda)) {
     transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
     y <- transform$transform(y = y, frequency = frequency)
