@@ -575,7 +575,7 @@ tsdecompose.bsts.estimate <- function(object, ...)
     AR <- NULL
   }
   if (!is.null(object$spec$xreg$xreg)) {
-    B <- object$model$coefficients[-burn, drop = FALSE]
+    B <- object$model$coefficients[-burn, , drop = FALSE]
     X <- object$spec$xreg$xreg
     X <- B %*% t(X)
     colnames(X) <- as.character(object$spec$target$Dindex)
