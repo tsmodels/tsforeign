@@ -1,7 +1,7 @@
 Package: tsforeign
 Type: Package
 Title: Interface To Other Packages
-Version: 0.2.1
+Version: 0.2.2
 Authors@R: c(person("Alexios", "Galanos", role = c("aut", "cre"),
     email = "alexios@4dscape.com"),
     person("James","Nesbit",role="ctb",

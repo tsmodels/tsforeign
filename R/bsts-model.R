@@ -21,8 +21,8 @@ bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, lev
 
   # 3. Check transformation
   y_orig <- y
-  if (!is.null(lambda)){
-    if(!is.na(lambda) & lambda == 1) lambda <- NULL
+  if (!is.null(lambda)) {
+    if (!is.na(lambda) & lambda == 1) lambda <- NULL
   }
   if (!is.null(lambda)) {
     transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
@@ -169,7 +169,7 @@ summary.bsts.estimate <- function(object, quantiles = c(0.025, 0.25, 0.5, 0.75, 
   summary_out <- summary(coda_out, quantiles = quantiles)
   # check xreg and ar for inclusion probabilities
   if (object$spec$model$ar) {
-    ar_out <- out[,grepl("ar[0-9]$", colnames(out))]
+    ar_out <- out[,grepl("ar[0-9]$", colnames(out)), drop = FALSE]
     ar_inclusion <- apply(ar_out, 2, function(x) sum(abs(x) > 0)/nrow(ar_out))
     summary_out$statistics <- cbind(summary_out$statistics, matrix(1, nrow = nrow(summary_out$statistics), dimnames = list(rownames(summary_out$statistics),"Prob[Include]")))
     summary_out$statistics[grepl("ar[0-9]$", colnames(out)),"Prob[Include]"] <- ar_inclusion
@@ -503,7 +503,7 @@ tsdecompose.bsts.estimate <- function(object, ...)
   burn <- SuggestBurn(0.1, object$model)
   if (burn > 0) {
     burn <- 1:burn
-    out <- object$model$full.state[-burn,,]
+    out <- object$model$full.state[-burn,,, drop = FALSE]
   } else {
     out <- object$model$full.state
   }
