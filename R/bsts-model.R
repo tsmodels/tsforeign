@@ -10,9 +10,6 @@ bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, lev
   if (!is.xts(y)) {
     stop("y must be an xts object")
   }
-  if (any(is.na(y))) {
-    stop("\nNAs found in y...not allowed.")
-  }
   # 2. Check regressors
   xreg <- check_xreg(xreg, index(y))
   
@@ -20,13 +17,14 @@ bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, lev
   distribution <- match.arg(distribution[1], valid_distributions)
 
   # 3. Check transformation
+  freq <- ifelse(seasonal, seasonal_frequency[1], 1)
   y_orig <- y
   if (!is.null(lambda)) {
     if (!is.na(lambda) & lambda == 1) lambda <- NULL
   }
   if (!is.null(lambda)) {
     transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
-    y <- transform$transform(y = y, frequency = frequency)
+    y <- transform$transform(y = y, frequency = freq)
     transform$lambda <- attr(y, "lambda")
   } else{
     transform <- NULL
@@ -202,7 +200,7 @@ tsmetrics.bsts.estimate <- function(object, ...)
   actual <- as.numeric(acfx[,1])
   fted <- as.numeric(acfx[,2])
   if (object$spec$model$seasonal) {
-    frequency <- object$spec$target$frequency
+    frequency <- object$spec$model$seasonal_frequency[1]
   } else {
     frequency <- 1
   }
@@ -220,6 +218,11 @@ tsmetrics.bsts.estimate <- function(object, ...)
 
 fitted.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE, raw = FALSE, type = c("filtered","smoothed"), ...)
 {
+  if (object$spec$model$seasonal) {
+    frequency <- object$spec$model$seasonal_frequency[1]
+  } else {
+    frequency <- 1
+  }
   type <- match.arg(type[1], c("filtered","smoothed"))
   burn <- SuggestBurn(0.1, object$model)
   state <- object$model$state.contributions
@@ -241,7 +244,7 @@ fitted.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE, ra
     if (!raw) {
       yin <- xts(object$spec$target$y_orig, object$spec$target$index)
       out <- do.call.fast(cbind, lapply(1:ncol(out), function(i) {
-        coredata(d2levels_fitted_matrix(act = yin[i:(i + 1)], pred = out[,i], d = object$spec$target$differences, transform = object$spec$transform, frequency = object$spec$target$frequency))
+        coredata(d2levels_fitted_matrix(act = yin[i:(i + 1)], pred = out[,i], d = object$spec$target$differences, transform = object$spec$transform, frequency = frequency))
       }))
       if (object$spec$target$differences == 1) {
         out <- cbind(matrix(as.numeric(object$spec$target$y_orig[1]), ncol = 1, nrow = nrow(out)), out)
@@ -252,7 +255,7 @@ fitted.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE, ra
     } else {
       yin <- xts(object$spec$target$y, object$spec$target$index)
       out <- do.call.fast(cbind, lapply(1:ncol(out), function(i) {
-        coredata(d2levels_fitted_matrix(act = yin[i:(i + 1)], pred = out[,i], d = object$spec$target$differences, transform = NULL, frequency = object$spec$target$frequency))
+        coredata(d2levels_fitted_matrix(act = yin[i:(i + 1)], pred = out[,i], d = object$spec$target$differences, transform = NULL, frequency = frequency))
       }))
       if (object$spec$target$differences == 1) {
         out <- cbind(matrix(as.numeric(object$spec$target$y[1]), ncol = 1, nrow = nrow(out)), out)
@@ -497,6 +500,30 @@ predict.bsts.estimate <- function(object, h = 1, newxreg  = NULL, forc_dates = N
   class(L) <- c("bsts.predict","tsmodel.predict")
   return(L)
 }
+
+tsmetrics.bsts.predict = function(object, actual, alpha = 0.1, ...)
+{
+  if (is.null(list(...)$frequency)) {
+    frequency <- object$spec$model$seasonal_frequency[1]
+  } else {
+    frequency <- list(...)$frequency
+  }
+  if (is.null(frequency)) frequency <- 1
+  n <- NCOL(object$distribution)
+  if (NROW(actual) != n) stop("\nactual length not equal to forecast length")
+  m_mape <- mape(actual, colMeans(object$distribution))
+  m_bias <- bias(actual, colMeans(object$distribution))
+  m_mslre <- mslre(actual, colMeans(object$distribution))
+  m_mase <- mase(actual, colMeans(object$distribution), object$original_series, frequency = frequency)
+  if (!is.null(alpha)) {
+    m_mis <- mis(actual, lower = apply(object$distribution, 2, quantile, alpha/2), upper = apply(object$distribution, 2, quantile, 1 - alpha/2), alpha = alpha)
+  } else {
+    m_mis <- as.numeric(NA)
+  }
+  m_crps <- crps(actual, object$distribution)
+  return(data.frame("h" = n, "MAPE" = m_mape, "MASE" = m_mase, "MSLRE" = m_mslre, "BIAS" = m_bias, "MIS" = m_mis,"CRPS" = m_crps))
+}
+
 
 tsdecompose.bsts.estimate <- function(object, ...)
 {

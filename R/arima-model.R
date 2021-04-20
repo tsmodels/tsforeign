@@ -300,11 +300,41 @@ predict.arima.estimate = function(object, h = NULL, newxreg = NULL, nsim = 5000,
   }
   class(sim) <- "tsmodel.distribution"
   mean_forecast = zoo(colMeans(sim), forc_dates)
+  order <- object$model$arma[c(1, 6, 2, 3, 7, 4, 5)]
+  m <- order[7]
+  if (m > 1 && sum(order[4:6]) > 0) {
+    frequency <- m
+  } else {
+    frequency <- 1
+  }
   zList = list(distribution = sim, original_series = zoo(object$spec$target$y_orig, object$spec$target$index),
-               h = h, mean = mean_forecast, spec = object$spec)
+               h = h, mean = mean_forecast, spec = object$spec, frequency = frequency)
   class(zList) <- c("arima.predict","tsmodel.predict")
   return(zList)
 }
+
+tsmetrics.arima.predict = function(object, actual, alpha = 0.1, ...)
+{
+  if (is.null(list(...)$frequency)) {
+    frequency <- object$frequency
+  } else {
+    frequency <- list(...)$frequency
+  }
+  n <- NCOL(object$distribution)
+  if (NROW(actual) != n) stop("\nactual length not equal to forecast length")
+  m_mape <- mape(actual, colMeans(object$distribution))
+  m_bias <- bias(actual, colMeans(object$distribution))
+  m_mslre <- mslre(actual, colMeans(object$distribution))
+  m_mase <- mase(actual, colMeans(object$distribution), object$original_series, frequency = frequency)
+  if (!is.null(alpha)) {
+    m_mis <- mis(actual, lower = apply(object$distribution, 2, quantile, alpha/2), upper = apply(object$distribution, 2, quantile, 1 - alpha/2), alpha = alpha)
+  } else {
+    m_mis <- as.numeric(NA)
+  }
+  m_crps <- crps(actual, object$distribution)
+  return(data.frame("h" = n, "MAPE" = m_mape, "MASE" = m_mase, "MSLRE" = m_mslre, "BIAS" = m_bias, "MIS" = m_mis,"CRPS" = m_crps))
+}
+
 
 ################################################################
 # imports from forecast

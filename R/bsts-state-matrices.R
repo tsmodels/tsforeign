@@ -242,6 +242,13 @@ bdiag <- function(...)
     if (nargs() == 1) x <- as.list(...) else x <- list(...)
     n <- length(x)
     if (n == 0) return(NULL)
+    zero_components <- sapply(x, function(y) length(y))
+    if (any(zero_components == 0)) {
+        exc <- which(zero_components == 0)
+        x <- x[-exc]
+        n <- length(x)
+        if (n == 0) return(NULL)
+    }
     x <- lapply(x, function(y) if (length(y)) as.matrix(y) else stop("Zero-length component in x"))
     d <- array(unlist(lapply(x, dim)), c(2, n))
     rr <- d[1, ]

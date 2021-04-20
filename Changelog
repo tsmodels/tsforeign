@@ -1,3 +1,8 @@
+# 2021-04-19 v0.2.3 [AG]
+- Fix to spec and summary not passing the frequency and resulting in an error.
+- Added tsmetrics to predicted object (which includes crps).
+- Added GNU make in DESCRIPTION
+
 # 2020-10-02 v0.2.2 [AG]
 - Fix to avoid dropping array dimension in the case of single component
 - Added Changelog to package

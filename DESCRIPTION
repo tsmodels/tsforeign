@@ -1,7 +1,7 @@
 Package: tsforeign
 Type: Package
 Title: Interface To Other Packages
-Version: 0.2.2
+Version: 0.2.3
 Authors@R: c(person("Alexios", "Galanos", role = c("aut", "cre"),
     email = "alexios@4dscape.com"),
     person("James","Nesbit",role="ctb",
@@ -11,9 +11,9 @@ Authors@R: c(person("Alexios", "Galanos", role = c("aut", "cre"),
 Maintainer: alexios galanos <alexios@4dscape.com>
 Description: Wrappers for models in other packages to conform to the unified time series framework.
 License: GPL-2
-SystemRequirements: C++11
+SystemRequirements: C++11, GNU make
 Depends: R (>= 3.5.0), Rcpp (>= 0.12.9), tsmethods
 LinkingTo: Rcpp (>= 0.12.9), RcppArmadillo, RcppDist
-Imports: methods, zoo, xts, data.table, bsts, tools, tsaux, forecast, mvtnorm, dlm, coda, foreach, doParallel, doSNOW, snow
+Imports: methods, zoo, xts, data.table, bsts, tools, tsaux, forecast, mvtnorm, dlm, coda, foreach, doParallel, doSNOW, snow, KFAS
 Encoding: UTF-8
 LazyData: true
