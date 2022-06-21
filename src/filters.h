@@ -1,6 +1,5 @@
 #ifndef _FILTERS_H
 #define _FILTERS_H
-#define STRICT_R_HEADERS
 #include <RcppArmadillo.h>
 #include <RcppDist.h>
 

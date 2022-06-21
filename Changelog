@@ -1,3 +1,6 @@
+# 2022-06-20 v0.2.4 [AG]
+- Converted documentation to roxygen and added workflows.
+
 # 2021-04-19 v0.2.3 [AG]
 - Fix to spec and summary not passing the frequency and resulting in an error.
 - Added tsmetrics to predicted object (which includes crps).

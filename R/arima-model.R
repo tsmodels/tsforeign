@@ -1,5 +1,31 @@
-arima_modelspec = function(y, xreg = NULL, frequency = NULL, seasonal = FALSE, seasonal_type = "regular", lambda = NULL, seasonal_harmonics = NULL, 
-                           lambda_lower = 0, lambda_upper = 1.5, ...)
+#' Auto ARIMA specification
+#'
+#' @description Sets up an automatic ARIMA specification ready for estimation.
+#' @param y an xts vector.
+#' @param xreg an xts matrix of external regressors.
+#' @param frequency frequency of y (if using a seasonal model).
+#' @param seasonal whether to include a seasonal component.
+#' @param seasonal_type type of seasonality (regular or trigonometric).
+#' @param seasonal_harmonics number of harmonics to include in the seasonal 
+#' component when seasonal_type is trigonometric.
+#' @param transformation a valid transformation for y from the \dQuote{tstransform} 
+#' function in the \dQuote{tsaux} package (currently box-cox or logit are available).
+#' @param lambda the Box Cox lambda. If not NULL, then either a numeric value or NA 
+#' denoting automatic calculation.
+#' @param lower lower bound for the transformation.
+#' @param upper upper bound for the transformation.
+#' @param ... additional terms passed to the \code{\link{auto.arima}} function.
+#' @return An object of class \dQuote{arima.spec}.
+#' @note This is a wrapper to the auto.arima function from the forecast package.
+#' @aliases arima_modelspec
+#' @rdname arima_modelspec
+#' @export
+#'
+#'
+#'
+#'
+arima_modelspec = function(y, xreg = NULL, frequency = NULL, seasonal = FALSE, seasonal_type = "regular", seasonal_harmonics = NULL, 
+                           transformation = "box-cox", lambda = NULL, lower = 0, upper = 1.5, ...)
 {
   # 1. Check y
   if (!is.xts(y)) {
@@ -10,18 +36,48 @@ arima_modelspec = function(y, xreg = NULL, frequency = NULL, seasonal = FALSE, s
   }
   # 2. Check regressors
   xreg <- check_xreg(xreg, index(y))
-  call <- list(frequency = frequency, seasonal = seasonal, seasonal_type = seasonal_type, lambda = lambda, seasonal_harmonics = seasonal_harmonics)
+  call <- list(frequency = frequency, seasonal = seasonal, seasonal_type = seasonal_type, transformation = transformation, 
+               lambda = lambda, lower = lower, upper = upper, seasonal_harmonics = seasonal_harmonics)
   # 3. Check transformation
   y_orig <- y
-  if (!is.null(lambda)){
-    if(!is.na(lambda) & lambda == 1) lambda <- NULL
-  }
   if (!is.null(lambda)) {
-    transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
-    y <- transform$transform(y = y, frequency = frequency)
-    transform$lambda <- attr(y, "lambda")
-  } else{
-    transform <- NULL
+    if (!is.na(lambda) & lambda == 1) lambda <- NULL
+  }
+  transformation <- match.arg(transformation[1], c("box-cox","logit"))
+  if (transformation == "logit") {
+      lambda <- 1
+      transform <- tstransform(method = transformation, lower = lower, upper = upper)
+      transform$lambda <- 1
+      transform$name <- "logit"
+      transform$include_lambda <- FALSE
+      transform$lower <- lower
+      transform$upper <- upper
+      y <- transform$transform(y)
+      y <- as.numeric(y)
+  } else {
+      if (is.null(lambda)) {
+          transform <- NULL
+      } else if (is.na(lambda)) {
+          include_lambda <- TRUE
+          transform <- tstransform(transformation, lambda = lambda, lower = lower, upper = upper)
+          y <- transform$transform(y = y, frequency = frequency[1])
+          transform$lambda <- attr(y, "lambda")
+          transform$include_lambda <- TRUE
+          lambda <- transform$lambda
+          transform$lower <- lower
+          transform$upper <- upper
+          transform$name <- "box-cox"
+      } else {
+          include_lambda <- FALSE
+          transform <- tstransform(transformation, lambda = lambda, lower = lower, upper = upper)
+          y <- transform$transform(y = y, frequency = frequency[1])
+          transform$include_lambda <- FALSE
+          transform$lambda <- lambda
+          transform$lower <- lower
+          transform$upper <- upper
+          transform$name <- "box-cox"
+      }
+      y <- as.numeric(y)
   }
   # 5. seasonal part
   if (seasonal) {
@@ -55,7 +111,8 @@ arima_modelspec = function(y, xreg = NULL, frequency = NULL, seasonal = FALSE, s
   spec$target$sampling <- sampling_frequency(index(y_orig))
   spec$transform <- transform
   spec$arima_args <- list(...)
-  spec$seasonal <- list(seasonal = seasonal, seasonal_type = seasonal_type, seasonal_fourier = seasonal_fourier, frequency = frequency, seasonal_harmonics = seasonal_harmonics)
+  spec$seasonal <- list(seasonal = seasonal, seasonal_type = seasonal_type, seasonal_fourier = seasonal_fourier, 
+                        frequency = frequency, seasonal_harmonics = seasonal_harmonics)
   if (!is.null(xreg)) {
     spec$xreg$xreg <- coredata(xreg)
   } else{
@@ -66,6 +123,25 @@ arima_modelspec = function(y, xreg = NULL, frequency = NULL, seasonal = FALSE, s
   return(spec)
 }
 
+#' Model Estimation
+#'
+#' @description Estimates a model given a specification object using
+#' maximum likelihood.
+#' @param object an object of class \dQuote{arima.spec} or \dQuote{bsts.spec}.
+#' @param n_iter mcmc draws for the bsts model.
+#' @param timeout.seconds timeout passed to the BstsOptions function.
+#' @param bma.method Bayesian Model Averaging method in the presence of 
+#' regressors, passed to the BstsOptions function.
+#' @param trace whether to show the MCMC iterations.
+#' @param ... for the bsts model, additional arguments passed to the underlying 
+#' estimation functions in the BSTS package.
+#' @return An object of class \dQuote{arima.estimate} or \dQuote{bsts.estimate}.
+#' @aliases estimate
+#' @method estimate arima.spec
+#' @rdname estimate
+#' @export
+#'
+#'
 estimate.arima.spec <- function(object, ...)
 {
   if (object$seasonal$seasonal) {
@@ -101,13 +177,29 @@ estimate.arima.spec <- function(object, ...)
   return(out)
 }
 
-summary.arima.estimate = function(object, ...)
-{
-  tmp <- object$model
-  tmp$series <- "y"
-  summary(tmp)
-}
-
+#' Model Fitted Values
+#'
+#' @description Extract the fitted values from an estimated model.
+#' @param object an object of class \dQuote{arima.estimate} or 
+#' \dQuote{bsts.estimate}.
+#' @param raw if a transformation was used, whether to return the transformed 
+#' fitted values (raw).
+#' @param distribution whether to return the full distribution for the bsts 
+#' model.
+#' @param invdiff if a model in differences was estimated, whether to inverse 
+#' the differencing when calculating the fitted values.
+#' @param type for the bsts model, the filtered are the one step ahead forecast 
+#' values, whilst the smoothed represent those values using the whole information 
+#' set.
+#' @param ... not currently used.
+#' @return For the distribution choice, an object of class 
+#' \dQuote{tsmodel.distribution}, else an xts vector.
+#' @aliases fitted
+#' @method fitted arima.estimate
+#' @rdname fitted
+#' @export
+#'
+#'
 fitted.arima.estimate = function(object, raw = FALSE, ...)
 {
   transform <- object$spec$transform
@@ -118,6 +210,30 @@ fitted.arima.estimate = function(object, raw = FALSE, ...)
   return(ft)
 }
 
+#' Model Residuals
+#'
+#' @description Extract the residual values from an estimated model.
+#' @param object an object of class \dQuote{tsissm.estimate}.
+#' @param distribution whether to return the full distribution for the bsts 
+#' model.
+#' @param invdiff if a model in differences was estimated, whether to inverse 
+#' the differencing when calculating the residual values.
+#' @param standardize whether to scale the errors by the model standard 
+#' deviation.
+#' @param raw raw residuals are the model based values in transformed space 
+#' (when either Box Cox or Logistic have been used as transformations).
+#' @param type for the bsts model, the filtered are the one step ahead forecast 
+#' errors, whilst the smoothed represent those values using the whole 
+#' information set.
+#' @param ... not currently used.
+#' @return For the distribution choice, an object of class 
+#' \dQuote{tsmodel.distribution}, else an xts vector.
+#' @aliases residuals
+#' @method residuals arima.estimate
+#' @rdname residuals
+#' @export
+#'
+#'
 residuals.arima.estimate = function(object, raw = FALSE, ...)
 {
   if (raw) {
@@ -129,6 +245,21 @@ residuals.arima.estimate = function(object, raw = FALSE, ...)
   return(e)
 }
 
+#' Model Estimation Summary
+#'
+#' @description Summary method.
+#' @param object an object of class \dQuote{arima.spec} or \dQuote{bsts.spec}.
+#' @param quantiles vector of quantiles to evaluate for each variable.
+#' @param ... not currently used.
+#' @return A printout of the parameter summary, model type and some model metrics. 
+#' For the bsts model, the posterior distribution of parameters is fist converted 
+#' into an \link{mcmc} object (coda package).
+#' @aliases summary
+#' @method summary arima.estimate
+#' @rdname summary
+#' @export
+#'
+#'
 summary.arima.estimate <- function(object, ...)
 {
   modelx <- arima_string(object$model)
@@ -153,6 +284,22 @@ summary.arima.estimate <- function(object, ...)
   return(invisible(out))
 }
 
+#' Performance Metrics
+#'
+#' @description Performance metrics from an estimated or predicted model.
+#' @param object An object of class \dQuote{arima.estimate}, 
+#' \dQuote{arima.predict}, \dQuote{bsts.estimate} or \dQuote{bsts.predict}.
+#' @param actual the actual data matched to the dates of the forecasts.
+#' @param alpha the coverage level for distributional forecast metrics.
+#' @param ... Optional arguments passed to the MASE function which includes 
+#' \dQuote{frequency}, else will be read from the object (act as an override for 
+#' instance when using fourier seasonality in xreg for arima).
+#' @aliases tsmetrics
+#' @method tsmetrics arima.estimate
+#' @rdname tsmetrics
+#' @export
+#'
+#'
 tsmetrics.arima.estimate <- function(object, ...)
 {
   fx <- fitted(object)
@@ -183,6 +330,18 @@ tsmetrics.arima.estimate <- function(object, ...)
              "MSLRE" = m_mslre, "BIAS" = m_bias)
 }
 
+#' Object Plots
+#'
+#' @description Plots for objects generated from the bsts or arima functions.
+#' @param x an object of class \dQuote{bsts.estimate} or \dQuote{arima.estimate}.
+#' @param y not used.
+#' @param ... no currently used.
+#' @aliases plot
+#' @method plot arima.estimate
+#' @rdname plot
+#' @export
+#'
+#'
 plot.arima.estimate <- function(x, y = NULL, ...)
 {
   opar <- par()
@@ -205,8 +364,58 @@ plot.arima.estimate <- function(x, y = NULL, ...)
   return(invisible(NULL))
 }
 
-
-predict.arima.estimate = function(object, h = NULL, newxreg = NULL, nsim = 5000, forc_dates = NULL, bootstrap = FALSE, innov = NULL, ...)
+#' Model Prediction
+#'
+#' @description Prediction function for class \dQuote{arima.estimate} or 
+#' \dQuote{bsts.estimate}.
+#' @param object an object of class \dQuote{arima.estimate} or \dQuote{bsts.estimate}.
+#' @param h the forecast horizon.
+#' @param newxreg a matrix of external regressors in the forecast horizon.
+#' @param nsim The number of simulations to use for generating the simulated 
+#' predictive distribution. For the bsts model, this is equal to the number of 
+#' MCMC samples generated during estimation, less any burn-in draws.
+#' @param forc_dates an optional vector of forecast dates equal to h. If NULL will
+#' use the implied periodicity of the data to generate a regular sequence of
+#' dates after the last available date in the data.
+#' @param init_states an optional named vector which will re-center distribution
+#' of the final state from which predictions are based off. It is best to call 
+#' \link{bsts_final_state} function in order to get the full matrix and make any 
+#' changes to the state_means prior to submitting to the function. It is required 
+#' that the full vector is provided and minimal checks other than length are performed.
+#' @param posterior_means optional vector of posterior parameter means which are 
+#' then use to re-center the posterior parameters. In the case of AR and regressor 
+#' coefficients, these should represent the means of the non-zero values (since 
+#' both of these types of parameters are based on a spike and slab prior). The 
+#' posterior distribution of the parameters can be obtain by calling 
+#' \link{bsts_posterior}.
+#' @param innov for the bsts and arima models this is an optional vector of uniform 
+#' innovations which will be translated to regular innovations using the 
+#' appropriate distribution quantile function and model standard deviation. The 
+#' length of this vector should be equal to nsim x horizon for the arima model 
+#' and MCMC draws (less burn) x horizon for the bsts model. Burn is equal to 
+#' SuggestBurn(0.1, object$model) for the bsts model.
+#' @param bootstrap for the arima model whether to bootstrap the residuals.
+#' @param burn optional scalar denoting the numbers of draws to burn from the 
+#' posterior prior to prediction.
+#' @param ... not currently used.
+#' @return An object which inherits class \dQuote{tsmodel.predict} with slots for 
+#' the simulated or posterior predictive distribution, the original series (as a 
+#' zoo object), the original specification object and the mean forecast. The 
+#' predictive distribution is inversed difference (if differencing > 0) and back 
+#' transformed if lambda was not NULL in the original specification. The innov 
+#' argument for bsts is unlikely to be useful for ensembling, as has been done 
+#' for other models with a single source of error as a result of multiple source 
+#' of errors which disables our ability to infuse the required dependence structure 
+#' via this approach. 
+#' @aliases predict
+#' @method predict arima.estimate
+#' @rdname predict
+#' @export
+#'
+#'
+predict.arima.estimate = function(object, h = NULL, newxreg = NULL, nsim = 5000, 
+                                  forc_dates = NULL, bootstrap = FALSE, 
+                                  innov = NULL, ...)
 {
   if (is.null(newxreg)) {
     if (is.null(h)) stop("\nhorizon (h) cannot be NULL when newxreg is NULL.")
@@ -313,6 +522,11 @@ predict.arima.estimate = function(object, h = NULL, newxreg = NULL, nsim = 5000,
   return(zList)
 }
 
+#' @method tsmetrics arima.predict
+#' @rdname tsmetrics
+#' @export
+#'
+#'
 tsmetrics.arima.predict = function(object, actual, alpha = 0.1, ...)
 {
   if (is.null(list(...)$frequency)) {
@@ -337,8 +551,8 @@ tsmetrics.arima.predict = function(object, actual, alpha = 0.1, ...)
 
 
 ################################################################
-# imports from forecast
-getxreg <- function (z) 
+# start imports from forecast
+getxreg <- function(z) 
 {
   if (is.element("xreg", names(z))) {
     return(z$xreg)
@@ -663,23 +877,46 @@ simulate2_Arima = function(object, nsim = length(object$x), seed = NULL, xreg = 
   }
   return(sim)
 }
+# end imports from forecast
+################################################################
 
-
-tsbacktest.arima.spec <- function(object, start = floor(NROW(object$target$y_orig)/2), end = NROW(object$target$y_orig), h = 1, alpha = NULL, 
-                                  cores = 1, data_name = "y", save_output = FALSE, save_dir = "~/tmp/", trace = FALSE, ...)
+#' Walk Forward Model Backtest
+#'
+#' @description Generates an expanding window walk forward backtest.
+#' @param object an object of class \dQuote{bsts.spec} or \dQuote{arima.spec}.
+#' @param start numeric data index from which to start the backtest.
+#' @param end numeric data index on which to end the backtest. The backtest will
+#' end 1 period before that date in order to have at least 1 out of sample value
+#' to compare against.
+#' @param h forecast horizon. As the expanding window approaches the \dQuote{end},
+#' the horizon will automatically shrink to the number of available out of sample
+#' periods.
+#' @param alpha optional numeric vector of coverage rates for which to calculate
+#' the quantiles.
+#' @param n_iter number of MCMC iterations.
+#' @param trace whether to show the progress bar. The user is expected to have
+#' set up appropriate handlers for this using the \dQuote{progressr} package.
+#' @param ... not currently used.
+#' @return A list with the following data.tables:
+#' \itemize{
+#' \item prediction : the backtest table with forecasts and actuals
+#' \item metrics: a summary performance table showing metrics by
+#' forecast horizon (MAPE, MSLRE, BIAS and MIS if alpha was not NULL).
+#' }
+#' @note The function can use parallel functionality as long as the user has
+#' set up a \code{\link[future]{plan}} using the future package.
+#' @aliases tsbacktest
+#' @method tsbacktest arima.spec
+#' @rdname tsbacktest
+#' @export
+#'
+#'
+tsbacktest.arima.spec <- function(object, start = floor(NROW(object$target$y_orig)/2), 
+                                  end = NROW(object$target$y_orig), h = 1, alpha = NULL, trace = FALSE, ...)
 {
-  if (save_output) {
-    if (is.null(save_dir)) {
-      stop("save_dir cannot be NULL when save.output is TRUE")
-    }
-    if (!dir.exists(save_dir)) {
-      stop("save_dir does not exit. Create first and then resubmit")
-    }
-  }
   data <- xts(object$target$y_orig, object$target$index)
   transform <- object$transform
   lambda <- transform$lambda
-  
   if (!is.null(object$xreg$xreg)) {
     use_xreg <- TRUE
     xreg <- xts(object$xreg$xreg, object$target$index)
@@ -707,19 +944,12 @@ tsbacktest.arima.spec <- function(object, start = floor(NROW(object$target$y_ori
   horizon <- sapply(1:length(seqdates), function(i){
     min(h, elapsed_time(index(data), index(data)[end], seqdates[i]))
   })
-  i <- 1
-  cl <- makeCluster(cores)
-  registerDoSNOW(cl)
   if (trace) {
-    iterations <- length(seqdates)
-    pb <- txtProgressBar(max = iterations, style = 3)
-    progress <- function(n) setTxtProgressBar(pb, n)
-    opts <- list(progress = progress)
-  } else {
-    opts <- NULL
+      prog_trace <- progressor(length(seqdates))
   }
-  
-  b <- foreach(i = 1:length(seqdates), .packages = c("tsmethods","tsaux","xts","tsforeign","forecast"), .options.snow = opts, .combine = rbind) %dopar% {
+  b <- NULL
+  b %<-% future_lapply(1:length(seqdates), function(i) {
+    if (trace) prog_trace()
     ytrain <- data[paste0("/", seqdates[i])]
     ix <- which(index(data) == seqdates[i])
     ytest <- data[(ix + 1):(ix + horizon[i])]
@@ -736,11 +966,6 @@ tsbacktest.arima.spec <- function(object, start = floor(NROW(object$target$y_ori
     spec <- do.call(arima_modelspec, args = speclist, quote = TRUE)
     mod <- estimate(spec)
     p <- predict(mod, h = horizon[i], newxreg = xreg_test, forc_dates = index(ytest))
-    
-    if (save_output) {
-      saveRDS(mod, file = paste0(save_dir,"/model_", seqdates[i], ".rds"))
-      saveRDS(p, file = paste0(save_dir,"/predict_", seqdates[i], ".rds"))
-    }
     if (!is.null(quantiles)) {
       qp <- apply(p$distribution, 2, quantile, quantiles)
       if (length(quantiles) == 1) {
@@ -757,12 +982,9 @@ tsbacktest.arima.spec <- function(object, start = floor(NROW(object$target$y_ori
                       "forecast" = as.numeric(p$mean), "actual" = as.numeric(ytest))
     if (!is.null(quantiles)) out <- cbind(out, qp)
     return(out)
-  }
-  stopCluster(cl)
-  if (trace) {
-    close(pb)
-  }
-  
+  }, future.packages = c("tsmethods","tsaux","xts","tsforeign","forecast"), future.seed = TRUE)
+  b <- eval(b)
+  b <- rbindlist(b)
   if (is.null(data_name)) data_name <- "y"
   actual <- NULL
   forecast <- NULL

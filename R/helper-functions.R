@@ -59,6 +59,22 @@ d2levels_forecast = function(act, pred, d = 1, transform = NULL, frequency = 1)
   return(dp)
 }
 
+
+#' Convert an estimated model to DLM
+#'
+#' @description Converts an estimated BSTS object to a DLM object.
+#' @param object tsconvert an object of class \dQuote{bsts.estimate}.
+#' @param to class to convert to. Currently only DLM supported, but KFAS may be 
+#' added in the future.
+#' @param draw either an integer or \dQuote{mean}, after eliminating any burn 
+#' draws, representing what part of the distribution to convert.
+#' @param burn draws to burn.
+#' @param ... not currently used.
+#' @aliases tsconvert
+#' @method tsconvert bsts.estimate
+#' @rdname tsconvert
+#' @export
+#'
 tsconvert.bsts.estimate <- function(object, to = "dlm", draw = "mean", burn = SuggestBurn(0.1, object$model), ...)
 {
   to <- match.arg(to[1], "dlm")

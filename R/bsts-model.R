@@ -1,11 +1,52 @@
+#' BSTS Model Secification
+#'
+#' @description Specifies a BSTS model prior to estimation.
+#' @param y an xts vector.
+#' @param xreg an xts matrix of external regressors.
+#' @param frequency frequency of y (if using a seasonal model).
+#' @param differences number of differences to apply to the outcome variable y 
+#' (max of 2).
+#' @param level whether to include a level component (Local Level Model).
+#' @param slope whether to include a slope component (Local Linear Model).
+#' @param damped whether to include a damped trend (damped Local Linear Model).
+#' @param seasonal whether to include a seasonal component.
+#' @param seasonal_frequency vector of seasonal frequencies.
+#' @param seasonal_type type of seasonality (regular or trigonometric).
+#' @param seasonal_harmonics number of harmonics to include in the seasonal 
+#' component when seasonal_type is trigonometric.
+#' @param ar whether to include a sparse AR component.
+#' @param ar_max number of lags for the AR component.
+#' @param cycle whether to include a cyclical component.
+#' @param cycle_frequency number of periods in a cycle. This can be a vector in 
+#' which case multiple cycles are included.
+#' @param cycle_names optional vector of cycle names.
+#' @param transformation a valid transformation for y from the \dQuote{tstransform} 
+#' function in the \dQuote{tsaux} package (currently box-cox or logit are available).
+#' @param lambda the Box Cox lambda. If NA will estimate this using the method 
+#' of Guerrero.
+#' @param lower lower bound for the transformation.
+#' @param upper upper bound for the transformation.
+#' @param distribution valid choices are currently only \dQuote{gaussian}.
+#' @param ... not currently used.
+#' @return An object of class \dQuote{bsts.spec}.
+#' @note This is a wrapper to part of the functionality of the bsts package. Once 
+#' an object is estimated, all other methods are implemented locally (including 
+#' prediction).
+#' @aliases bsts_modelspec
+#' @rdname bsts_modelspec
+#' @export
+#'
+#'
+#'
+#'
 bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, level = TRUE, slope = TRUE, damped = FALSE, seasonal = FALSE, 
                           seasonal_frequency = 4, ar = FALSE, ar_max = 1, cycle = FALSE, cycle_frequency = NULL, cycle_names = NULL, 
-                          seasonal_type = "regular", lambda = NULL, lambda_lower = 0, lambda_upper = 1,
-                          seasonal_harmonics = NULL, distribution = "gaussian", ...)
+                          seasonal_type = "regular", seasonal_harmonics = NULL, transformation = "box-cox", lambda = NULL, lower = 0, upper = 1,
+                          distribution = "gaussian", ...)
 {
   model <- list(frequency = frequency, differences = differences, level = level, slope = slope, damped = damped, seasonal = seasonal, seasonal_frequency = seasonal_frequency, 
-               ar = ar, ar_max = ar_max, cycle = cycle, cycle_frequency = cycle_frequency, cycle_names = cycle_names, seasonal_type = seasonal_type, lambda = lambda,
-               seasonal_harmonics = seasonal_harmonics, distribution = distribution)
+               ar = ar, ar_max = ar_max, cycle = cycle, cycle_frequency = cycle_frequency, cycle_names = cycle_names, seasonal_type = seasonal_type, 
+               transformation = transformation, lambda = lambda, seasonal_harmonics = seasonal_harmonics, distribution = distribution)
   # 1. Check y
   if (!is.xts(y)) {
     stop("y must be an xts object")
@@ -23,7 +64,7 @@ bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, lev
     if (!is.na(lambda) & lambda == 1) lambda <- NULL
   }
   if (!is.null(lambda)) {
-    transform <- box_cox(lambda = lambda, lower = lambda_lower, upper = lambda_upper)
+    transform <- box_cox(lambda = lambda, lower = lower, upper = upper)
     y <- transform$transform(y = y, frequency = freq)
     transform$lambda <- attr(y, "lambda")
   } else{
@@ -133,7 +174,11 @@ bsts_modelspec = function(y, xreg = NULL, frequency = NULL, differences = 0, lev
   return(spec)
 }
 
-
+#' @method estimate bsts.spec
+#' @rdname estimate
+#' @export
+#'
+#'
 estimate.bsts.spec = function(object, n_iter = 5000, timeout.seconds = Inf, bma.method = "SSVS", trace = TRUE, ...)
 {
   model.opt <- BstsOptions(save.state.contributions = TRUE, save.prediction.errors = TRUE, bma.method = bma.method, 
@@ -156,6 +201,11 @@ estimate.bsts.spec = function(object, n_iter = 5000, timeout.seconds = Inf, bma.
   return(obj)
 }
 
+#' @method summary bsts.estimate
+#' @rdname summary
+#' @export
+#'
+#'
 summary.bsts.estimate <- function(object, quantiles = c(0.025, 0.25, 0.5, 0.75, 0.975), ...)
 {
   out <- bsts_posterior(object)
@@ -192,6 +242,11 @@ summary.bsts.estimate <- function(object, quantiles = c(0.025, 0.25, 0.5, 0.75, 
   return(invisible(summary_out))
 }
 
+#' @method tsmetrics bsts.estimate
+#' @rdname tsmetrics
+#' @export
+#'
+#'
 tsmetrics.bsts.estimate <- function(object, ...)
 {
   fx <- fitted(object)
@@ -216,6 +271,10 @@ tsmetrics.bsts.estimate <- function(object, ...)
   return(data.frame("n" = ny, "no.pars" = np + 1, "MAPE" = m_mape, "MASE" = m_mase, "MSLRE" = m_mslre, "BIAS" = m_bias))
 }
 
+#' @method fitted bsts.estimate
+#' @rdname fitted
+#' @export
+#'
 fitted.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE, raw = FALSE, type = c("filtered","smoothed"), ...)
 {
   if (object$spec$model$seasonal) {
@@ -294,6 +353,11 @@ fitted.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE, ra
   return(out)
 }
 
+#' @method residuals bsts.estimate
+#' @rdname residuals
+#' @export
+#'
+#'
 residuals.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE, standardize = FALSE, raw = FALSE, type = c("filtered", "smoothed"), ...)
 {
   if (distribution) {
@@ -356,7 +420,10 @@ residuals.bsts.estimate = function(object, distribution = FALSE, invdiff = TRUE,
   return(out)
 }
 
-predict.bsts.estimate <- function(object, h = 1, newxreg  = NULL, forc_dates = NULL, last_state_means = colMeans(bsts_final_state(object)), posterior_means = NULL, innov = NULL, burn = NULL, ...)
+#' @method predict bsts.estimate
+#' @rdname predict
+#' @export
+predict.bsts.estimate <- function(object, h = 1, newxreg  = NULL, forc_dates = NULL, init_states = colMeans(bsts_final_state(object)), posterior_means = NULL, innov = NULL, burn = NULL, ...)
 {
   if (is.null(burn)) {
     burn <- SuggestBurn(0.1, object$model)
@@ -371,12 +438,12 @@ predict.bsts.estimate <- function(object, h = 1, newxreg  = NULL, forc_dates = N
   requiredn <- h * N
   
   final_state <- bsts_final_state(object)
-  if (!is.null(last_state_means)) {
-    if (length(last_state_means) != ncol(final_state)) {
+  if (!is.null(init_states)) {
+    if (length(init_states) != ncol(final_state)) {
       stop("\nlast_state_means length not equal to ncol(final.state)")
     } else {
       final_state <- scale(final_state, scale = FALSE)
-      final_state <- scale(final_state, center = -1 * last_state_means, scale = FALSE)
+      final_state <- scale(final_state, center = -1 * init_states, scale = FALSE)
     }
   }
   final_state <- final_state[-burn,,drop = FALSE]
@@ -501,6 +568,11 @@ predict.bsts.estimate <- function(object, h = 1, newxreg  = NULL, forc_dates = N
   return(L)
 }
 
+#' @method tsmetrics bsts.predict
+#' @rdname tsmetrics
+#' @export
+#'
+#'
 tsmetrics.bsts.predict = function(object, actual, alpha = 0.1, ...)
 {
   if (is.null(list(...)$frequency)) {
@@ -525,6 +597,20 @@ tsmetrics.bsts.predict = function(object, actual, alpha = 0.1, ...)
 }
 
 
+#' Model Decomposition
+#'
+#' @description Decomposes the estimated model or prediction into its component
+#' parts (states).
+#' @param object an object of class \dQuote{bsts.estimate} or \dQuote{bsts.predict}
+#' @param ... not currently used.
+#' @return A list of class \dQuote{tsmodel.distribution} representing the 
+#' distribution of the state components of the model.
+#' @aliases tsdecompose
+#' @method tsdecompose bsts.estimate
+#' @rdname tsdecompose
+#' @export
+#'
+#'
 tsdecompose.bsts.estimate <- function(object, ...)
 {
   burn <- SuggestBurn(0.1, object$model)
@@ -616,7 +702,11 @@ tsdecompose.bsts.estimate <- function(object, ...)
   return(L)
 }
 
-
+#' @method tsdecompose bsts.predict
+#' @rdname tsdecompose
+#' @export
+#'
+#'
 tsdecompose.bsts.predict <- function(object, ...)
 {
   c_names <- object$spec$state_space$component_names
@@ -701,7 +791,11 @@ tsdecompose.bsts.predict <- function(object, ...)
   return(L)
 }
 
-
+#' @method plot bsts.estimate
+#' @rdname plot
+#' @export
+#'
+#'
 plot.bsts.estimate <- function(x, y = NULL, ...)
 {
   # Fitted + Residuals
@@ -746,17 +840,12 @@ hgof.bsts.estimate <- function(object, d = 0)
   return(relative_gof)
 }
 
+#' @method tsbacktest bsts.spec
+#' @rdname tsbacktest
+#' @export
 tsbacktest.bsts.spec <- function(object, start = floor(NROW(object$target$y_orig)/2), end = NROW(object$target$y_orig), h = 1, alpha = NULL, 
-                                 cores = 1, data_name = "y", save_output = FALSE, save_dir = "~/tmp/", trace = FALSE, n_iter = 5000, ...)
+                                 trace = FALSE, n_iter = 5000, ...)
 {
-  if (save_output) {
-    if (is.null(save_dir)) {
-      stop("save.dir cannot be NULL when save.output is TRUE")
-    }
-    if (!dir.exists(save_dir)) {
-      stop("save.dir does not exit. Create first and then resubmit")
-    }
-  }
   transform <- object$transform
   lambda <- transform$lambda
   frequency <- object$target$frequency
@@ -787,18 +876,12 @@ tsbacktest.bsts.spec <- function(object, start = floor(NROW(object$target$y_orig
   horizon <- sapply(1:length(seqdates), function(i){
     min(h, elapsed_time(index(data), index(data)[end], seqdates[i]))
   })
-  i <- 1
-  cl <- makeCluster(cores)
-  registerDoSNOW(cl)
   if (trace) {
-    iterations <- length(seqdates)
-    pb <- txtProgressBar(max = iterations, style = 3)
-    progress <- function(n) setTxtProgressBar(pb, n)
-    opts <- list(progress = progress)
-  } else {
-    opts <- NULL
+      prog_trace <- progressor(length(seqdates))
   }
-  b <- foreach(i = 1:length(seqdates), .packages = c("tsmethods","tsaux","tsforeign","xts","data.table","bsts"), .options.snow = opts, .combine = rbind) %dopar% {
+  b <- NULL
+  b %<-% future_lapply(1:length(seqdates), function(i) {
+    if (trace) prog_trace()
     ytrain <- data[paste0("/", seqdates[i])]
     ix <- which(index(data) == seqdates[i])
     ytest <- data[(ix + 1):(ix + horizon[i])]
@@ -816,10 +899,6 @@ tsbacktest.bsts.spec <- function(object, start = floor(NROW(object$target$y_orig
                            lambda = lambda, distribution = object$model$distribution)
     mod <- estimate(spec, n_iter = n_iter)
     p <- predict(mod, h = horizon[i], newxreg = xreg_test, forc_dates = index(ytest))
-    if (save_output) {
-      saveRDS(mod, file = paste0(save_dir,"/model_", seqdates[i], ".rds"))
-      saveRDS(p, file = paste0(save_dir,"/predict_", seqdates[i], ".rds"))
-    }
     if (!is.null(quantiles)) {
       qp <- apply(p$distribution, 2, quantile, quantiles)
       if (length(quantiles) == 1) {
@@ -836,17 +915,13 @@ tsbacktest.bsts.spec <- function(object, start = floor(NROW(object$target$y_orig
                       "forecast" = as.numeric(p$mean), "actual" = as.numeric(ytest))
     if (!is.null(quantiles)) out <- cbind(out, qp)
     return(out)
-  }
-  stopCluster(cl)
-  if (trace) {
-    close(pb)
-  }
+  }, future.packages = c("tsmethods","tsaux","tsforeign","xts","data.table","bsts"), future.seed = TRUE)
+  b <- eval(b)
+  b <- rbindlist(b)
   if (is.null(data_name)) data_name <- "y"
   actual <- NULL
   forecast <- NULL
-  metrics <- b[,list(variable = data_name, MAPE = mape(actual, forecast), MSLRE = mslre(actual, forecast),
-                     BIAS = bias(actual, forecast),
-                     n = .N), by = "horizon"]
+  metrics <- b[,list(variable = data_name, MAPE = mape(actual, forecast), MSLRE = mslre(actual, forecast), BIAS = bias(actual, forecast), n = .N), by = "horizon"]
   if (!is.null(alpha)) {
     q_names <- matrix(paste0("P", round(quantiles*100,1)), ncol = 2, byrow = TRUE)
     q <- do.call(cbind, lapply(1:length(alpha), function(i){

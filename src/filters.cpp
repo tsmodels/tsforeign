@@ -20,7 +20,6 @@ inline arma::mat injectG(arma::mat &G, const arma::uvec indexG, const arma::vec 
 // [[Rcpp::depends(RcppArmadillo,RcppDist)]]
 // [[Rcpp::plugins(cpp14)]]
 // [[Rcpp::export]]
-
 Rcpp::List bsts_posterior_predict(Rcpp::NumericVector model, arma::rowvec Z, arma::mat G, arma::mat Q, arma::mat R, arma::mat init_state, 
                                   arma::mat X, arma::mat B, arma::mat gpriors, arma::mat qpriors, arma::vec vpriors, arma::mat U)
 {
@@ -61,7 +60,3 @@ Rcpp::List bsts_posterior_predict(Rcpp::NumericVector model, arma::rowvec Z, arm
     return R_NilValue;
 }
 
-
-
-// filter
-// smoother

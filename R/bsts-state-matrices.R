@@ -173,7 +173,7 @@ ar_ss <- function(object, ar)
     # need to transpose this to have the correct representation as bsts
     G <- t(out$GG)
     Q <- matrix(NA, 1, 1)
-    Q2<- diag(c(as.numeric(NA), rep(0, ar - 1)), ar, ar)
+    Q2 <- diag(c(as.numeric(NA), rep(0, ar - 1)), ar, ar)
     if (ar > 1) {
         R <- matrix(c(1, rep(0, ar - 1)), ncol = 1)
     } else {
@@ -270,13 +270,25 @@ bdiag <- function(...)
     return(out)
 }
 #################################################
-
+#' BSTS Extractor Functions
+#'
+#' @param object object of class \dQuote{bsts.estimate}.
+#' @details The full and final states functions extract the smoothed states 
+#' distribution from the BSTS estimated object, and the posterior function the
+#' draws x parameters matrix.
+#' @aliases bsts_full_states bsts_final_state bsts_posterior
+#' @rdname bsts_extractors
+#' @export
+#'
 bsts_full_states <- function(object)
 {
     if (!inherits(object, "bsts.estimate")) stop("\nobject must inherit class bsts.estimate")
     return(object$model$full.state)
 }
 
+#' @rdname bsts_extractors
+#' @export
+#'
 bsts_final_state <- function(object)
 {
     if (!inherits(object, "bsts.estimate")) stop("\nobject must inherit class bsts.estimate")
@@ -285,6 +297,9 @@ bsts_final_state <- function(object)
     return(out)
 }
 
+#' @rdname bsts_extractors
+#' @export
+#'
 bsts_posterior <- function(object)
 {
     if (!inherits(object, "bsts.estimate")) stop("\nobject must inherit class bsts.estimate")

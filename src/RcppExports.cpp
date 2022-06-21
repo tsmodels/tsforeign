@@ -6,6 +6,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // bsts_posterior_predict
 Rcpp::List bsts_posterior_predict(Rcpp::NumericVector model, arma::rowvec Z, arma::mat G, arma::mat Q, arma::mat R, arma::mat init_state, arma::mat X, arma::mat B, arma::mat gpriors, arma::mat qpriors, arma::vec vpriors, arma::mat U);
 RcppExport SEXP _tsforeign_bsts_posterior_predict(SEXP modelSEXP, SEXP ZSEXP, SEXP GSEXP, SEXP QSEXP, SEXP RSEXP, SEXP init_stateSEXP, SEXP XSEXP, SEXP BSEXP, SEXP gpriorsSEXP, SEXP qpriorsSEXP, SEXP vpriorsSEXP, SEXP USEXP) {
